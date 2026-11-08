@@ -123,15 +123,18 @@ class PacMan(Entity):
     """
 
     DEFAULT_DIRECTION = (1, 0)   # regarde à droite tant qu'il n'a pas bougé
+    # ordre des images pendant un pas (indices dans la liste) : 1 → 2 → 3 → 2, puis on recommence à 1
+    ANIMATION = (0, 1, 2, 1)
 
-    def __init__(self, pos: tuple[int, int], images: dict[tuple[int, int], Image]) -> None:
+    def __init__(self, pos: tuple[int, int], images: dict[tuple[int, int], list[Image]]) -> None:
         """Place Pac-Man immobile sur une case.
 
         Args:
             pos: case de départ (x, y) dans la grille.
-            images: un sprite par direction (dx, dy), déjà à la taille du labyrinthe.
+            images: pour chaque direction (dx, dy), ses images d'animation,
+                déjà à la taille du labyrinthe.
         """
-        super().__init__(pos, images[self.DEFAULT_DIRECTION])
+        super().__init__(pos, images[self.DEFAULT_DIRECTION][0])
         self.images = images
         self.direction = (0, 0)
         self.next_direction = (0, 0)
@@ -143,17 +146,20 @@ class PacMan(Entity):
         self.next_direction = (0, 0)
 
     def current_image(self) -> Image:
-        """Renvoie le sprite tourné vers la direction de Pac-Man.
+        """Renvoie l'image d'animation tournée vers la direction de Pac-Man.
 
-        Garde la dernière direction quand il est arrêté contre un mur,
-        et regarde à droite tant qu'il n'a jamais bougé.
+        L'image suit l'avancement du pas en cours (move_timer) : la bouche
+        s'ouvre et se ferme une fois par case. À l'arrêt, move_timer vaut 0,
+        donc il garde la première image. Il garde aussi la dernière direction
+        contre un mur, et regarde à droite tant qu'il n'a jamais bougé.
 
         Returns:
-            Le sprite correspondant à self.direction.
+            L'image correspondant à self.direction et au moment du pas.
         """
         if self.direction == (0, 0):
             return self.image
-        return self.images[self.direction]
+        step = self.move_timer * len(self.ANIMATION) // self.MOVE_DELAY
+        return self.images[self.direction][self.ANIMATION[step]]
 
     def choose_step(self, grid: list[list[int]]) -> None:
         """Décide de la direction du prochain pas (self.moving).

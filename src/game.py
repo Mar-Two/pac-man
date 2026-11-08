@@ -64,7 +64,9 @@ class Game(State):
         ghosts_spawn: list[tuple[int, int]] = [self.find_spawn(pos) for pos in ghosts_pos]
         # images chargées une seule fois, déjà à la taille des sprites de ce labyrinthe
         sprite_size = (self.sprite_size, self.sprite_size)
-        pacman_images = {direction: Image(f"{PACMAN_DIR}-{name}/1.png", sprite_size)
+        # 3 images par direction : 1 = bouche ouverte, 2 = mi-ouverte, 3 = fermée
+        pacman_images = {direction: [Image(f"{PACMAN_DIR}-{name}/{frame}.png", sprite_size)
+                                     for frame in (1, 2, 3)]
                          for direction, name in self.PACMAN_SPRITES.items()}
         ghost_images = [Image(f"{GHOSTS_DIR}/{name}.png", sprite_size) for name in self.GHOST_SPRITES]
         self.pacman = PacMan(pacman_spawn, pacman_images)
