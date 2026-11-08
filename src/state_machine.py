@@ -1,6 +1,8 @@
+"""Machine à états : passe d'un écran du jeu à l'autre (menus, partie...)."""
 from abc import ABC, abstractmethod
-
 import pygame
+
+from .render import Screen
 
 
 class State(ABC):
@@ -41,11 +43,11 @@ class State(ABC):
         pass
 
     @abstractmethod
-    def draw(self, screen: pygame.Surface) -> None:
+    def draw(self, screen: Screen) -> None:
         """Dessine l'état sur l'écran, une fois par image.
 
         Args:
-            screen: surface de la fenêtre sur laquelle dessiner.
+            screen: écran (tableau de pixels) sur lequel dessiner.
         """
         pass
 
@@ -95,11 +97,11 @@ class StateMachine:
         if self.current_state is not None:
             self.current_state.update()
 
-    def draw(self, screen: pygame.Surface) -> None:
+    def draw(self, screen: Screen) -> None:
         """Dessine l'état courant.
 
         Args:
-            screen: surface de la fenêtre sur laquelle dessiner.
+            screen: écran (tableau de pixels) sur lequel dessiner.
         """
         if self.current_state is not None:
             self.current_state.draw(screen)

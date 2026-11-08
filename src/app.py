@@ -1,7 +1,10 @@
+"""Point d'entrée du jeu : fenêtre, machine à états et boucle principale."""
 from mazegenerator import MazeGenerator
 import pygame
 
+from .render import Screen
 from .colors import BLACK
+from .constants import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 from .state_machine import StateMachine
 from .menus import MainMenu, PauseMenu
 from .game import Game
@@ -10,25 +13,22 @@ from .game import Game
 class App:
     """Programme principal : crée la fenêtre, les états et fait tourner la boucle."""
 
-    def __init__(self, maze: MazeGenerator, screen_width: int = 1080, screen_height: int = 720) -> None:
+    def __init__(self, maze: MazeGenerator) -> None:
         """Prépare l'application, sans encore ouvrir la fenêtre.
 
         Args:
             maze: labyrinthe généré utilisé pour la partie.
-            screen_width: largeur de la fenêtre en pixels.
-            screen_height: hauteur de la fenêtre en pixels.
         """
-        self.screen_width = screen_width
-        self.screen_height = screen_height
         self.maze = maze
 
     def run(self) -> None:
-        """Ouvre la fenêtre et fait tourner la boucle principale à 60 images par seconde.
+        """Ouvre la fenêtre et fait tourner la boucle principale à FPS images par seconde.
 
         Rend la main quand la machine à états s'arrête ou que la fenêtre est fermée.
         """
         pygame.init()
-        screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        window = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        screen = Screen(SCREEN_WIDTH, SCREEN_HEIGHT)
         pygame.display.set_caption("PacMan")
         clock = pygame.time.Clock()
 
@@ -51,15 +51,15 @@ class App:
 
             machine.draw(screen)
 
-            pygame.display.flip()
-            clock.tick(60)
+            screen.put_to_window(window)
+            clock.tick(FPS)
 
         pygame.quit()
 
 
 if __name__ == "__main__":
-    maze = MazeGenerator(size=(20, 20), seed=42)
-    window = App(maze, 1080, 720)
+    maze = MazeGenerator(size=(28, 28), seed=42)
+    window = App(maze)
     window.run()
     # for line in maze.maze:
     #     print(line)

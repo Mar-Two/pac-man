@@ -1,36 +1,43 @@
+"""Menus du jeu (principal et pause) : en-tête, boutons et navigation au clavier."""
 import pygame
 
-from .colors import WHITE, BLUE, YELLOW, RED
+from .colors import RED
 from .state_machine import State, StateMachine
+from .render import Screen, Image
+from .constants import MENU_DIR
 
-BUTTON_RATIO = 6
-BUTTON_WIDTH = 0.4
-MARGIN_Y = 0.1
-GAP = 0.8
-CORNER_RADIUS = 0.25
-OUTLINE_WIDTH = 0.05
-KEYS_INFO_HEIGHT = 0.05
+# tailles fixes en pixels (les largeurs viennent des images elles-mêmes)
+HEADER_HEIGHT = 120
+BUTTON_HEIGHT = 64
+MARGIN_Y = 64
+GAP = 48
+KEYS_INFO_HEIGHT = 32
 
 
 class Menu(State):
     """Menu générique : un en-tête, une colonne de boutons et une barre d'info.
 
-    Les sous-classes définissent OPTIONS, HEADER_RATIO, HEADER_WIDTH,
-    on_select() et draw_header().
+    Les sous-classes définissent OPTIONS, HEADER_FILE et on_select().
+    Les images sont lues dans MENU_DIR : HEADER_FILE pour l'en-tête,
+    <option>.png et <option>_selected.png pour chaque bouton.
     """
 
     OPTIONS: tuple[str, ...] = ()
-    HEADER_RATIO: float
-    HEADER_WIDTH: float
+    HEADER_FILE: str
 
     def __init__(self, state_machine: StateMachine) -> None:
-        """Initialise le menu avec le premier bouton sélectionné.
+        """Charge les images du menu et sélectionne le premier bouton.
+
+        Les images sont chargées une seule fois ici, et non à chaque image affichée.
 
         Args:
             state_machine: machine à états qui possède ce menu.
         """
         super().__init__(state_machine)
         self.select: int = 0
+        self.header: Image = Image(f"{MENU_DIR}/{self.HEADER_FILE}")
+        self.buttons = [Image(f"{MENU_DIR}/{option}.png") for option in self.OPTIONS]
+        self.buttons_selected = [Image(f"{MENU_DIR}/{option}_selected.png") for option in self.OPTIONS]
 
     def on_enter(self) -> None:
         """Resélectionne le premier bouton à chaque ouverture du menu."""
@@ -58,98 +65,59 @@ class Menu(State):
             elif event.key == pygame.K_SPACE or event.key == pygame.K_RETURN:
                 self.on_select(self.OPTIONS[self.select])
 
-    def draw_header(self, screen: pygame.Surface, header: pygame.Rect) -> None:
-        """Dessine l'en-tête du menu, à redéfinir.
+    def draw(self, screen: Screen) -> None:
+        """Dessine le menu à tailles fixes, centré horizontalement.
+
+        L'en-tête en haut, les boutons en colonne en dessous (le bouton
+        sélectionné avec son image _selected) et la barre d'info en bas de l'écran.
 
         Args:
-            screen: surface de la fenêtre sur laquelle dessiner.
-            header: zone réservée à l'en-tête.
+            screen: écran (tableau de pixels) sur lequel dessiner.
         """
-        pass
-
-    def draw(self, screen: pygame.Surface) -> None:
-        """Dessine le menu en adaptant sa taille à l'écran.
-
-        Si le contenu ne tient pas en hauteur, tout est réduit
-        dans la même proportion.
-
-        Args:
-            screen: surface de la fenêtre sur laquelle dessiner.
-        """
-        screen_rect = screen.get_rect()
-        margin_y = int(screen_rect.height * MARGIN_Y)
-        keys_info_height = int(screen_rect.height * KEYS_INFO_HEIGHT)
-
-        header_width = screen_rect.width * self.HEADER_WIDTH
-        header_height = header_width / self.HEADER_RATIO
-        button_width = screen_rect.width * BUTTON_WIDTH
-        button_height = button_width / BUTTON_RATIO
-
-        gap_height = button_height * GAP
-        content_height = header_height + len(self.OPTIONS) * (gap_height + button_height)
-        available_height = screen_rect.height - keys_info_height - 2 * margin_y
-        scale = min(1, available_height / content_height)
-
-        header = pygame.Rect(0, 0, header_width * scale, header_height * scale)
-        button = pygame.Rect(0, 0, button_width * scale, button_height * scale)
-        keys_info = pygame.Rect(0, 0, screen_rect.width, keys_info_height)
-        gap = int(button.height * GAP)
-        step_y = button.height + gap
-        radius = int(button.height * CORNER_RADIUS)
-        outline = max(1, int(button.height * OUTLINE_WIDTH))
-
-        header.midtop = (screen_rect.centerx, margin_y)
-        button.midtop = (screen_rect.centerx, header.bottom + gap)
-        keys_info.midbottom = (screen_rect.centerx, screen_rect.height)
-
-        self.draw_header(screen, header)
-        pygame.draw.rect(screen, RED, keys_info)
+        header_x = (screen.width - self.header.width) // 2
+        header_y = MARGIN_Y
+        first_button_y = header_y + HEADER_HEIGHT + GAP
+        step_y = BUTTON_HEIGHT + GAP
+        keys_info_y = screen.height - KEYS_INFO_HEIGHT
+        screen.draw_image(self.header, header_x, header_y)
+        screen.draw_rect(0, keys_info_y, screen.width, KEYS_INFO_HEIGHT, RED)
         for i in range(len(self.OPTIONS)):
-            button_move = button.move(0, i * step_y)
-            pygame.draw.rect(screen, WHITE, button_move, border_radius=radius)
-            if i == self.select:
-                pygame.draw.rect(screen, BLUE, button_move, outline, border_radius=radius)
+            button_y = first_button_y + i * step_y
+            image = self.buttons_selected[i] if i == self.select else self.buttons[i]
+            button_x = (screen.width - image.width) // 2
+            screen.draw_image(image, button_x, button_y)
 
 
 class MainMenu(Menu):
-    """Menu d'accueil : jouer, voir les scores ou quitter."""
+    """Menu d'accueil : jouer, voir les scores, lire les instructions ou quitter."""
 
-    OPTIONS = ("play", "score", "quit")
-    HEADER_RATIO = 4
-    HEADER_WIDTH = 0.5
+    OPTIONS = ("play", "scores", "instructions", "quit")
+    HEADER_FILE = "header_main.png"
 
     def on_select(self, option: str) -> None:
-        """Lance la partie, affiche les scores ou quitte le programme.
+        """Lance la partie, affiche les scores ou les instructions, ou quitte le programme.
 
         Args:
             option: nom du bouton validé.
         """
         if option == "play":
             self.state_machine.change("game")
-        elif option == "score":
-            print("'Score' from MainMenu")
+        elif option == "scores":
+            print("'Scores' from MainMenu")
+        elif option == "instructions":
+            print("'instructions' from MainMenu")
         elif option == "quit":
             self.state_machine.running = False
 
-    def draw_header(self, screen: pygame.Surface, header: pygame.Rect) -> None:
-        """Dessine le logo (pour l'instant un rectangle jaune).
-
-        Args:
-            screen: surface de la fenêtre sur laquelle dessiner.
-            header: zone réservée au logo.
-        """
-        pygame.draw.rect(screen, YELLOW, header)
-
 
 class PauseMenu(Menu):
-    """Menu de pause : reprendre, tricher ou retourner au menu principal."""
+    """Menu de pause : reprendre, tricher, retourner au menu principal ou quitter."""
 
-    OPTIONS = ("resume", "cheat", "main_menu")
-    HEADER_RATIO = 4
-    HEADER_WIDTH = 0.5
+    OPTIONS = ("resume", "cheat", "main_menu", "quit")
+    HEADER_FILE = "header_pause.png"
 
     def on_select(self, option: str) -> None:
-        """Reprend la partie, active la triche ou retourne au menu principal.
+        """Reprend la partie, active la triche, retourne au menu principal ou quitte le programme.
 
         Args:
             option: nom du bouton validé.
@@ -160,12 +128,5 @@ class PauseMenu(Menu):
             print("'cheat' from PauseMenu")
         elif option == "main_menu":
             self.state_machine.change("main_menu")
-
-    def draw_header(self, screen: pygame.Surface, header: pygame.Rect) -> None:
-        """Dessine le titre « pause » (pour l'instant un rectangle bleu).
-
-        Args:
-            screen: surface de la fenêtre sur laquelle dessiner.
-            header: zone réservée au titre.
-        """
-        pygame.draw.rect(screen, BLUE, header)
+        elif option == "quit":
+            self.state_machine.running = False
