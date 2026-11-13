@@ -1,7 +1,7 @@
 """Entités qui se déplacent dans le labyrinthe : Pac-Man et les fantômes."""
 import random
 from abc import ABC, abstractmethod
-
+from collections import deque
 from .render import Screen, Image
 
 
@@ -183,10 +183,18 @@ class PacMan(Entity):
 
 
 class Ghost(Entity):
-    """Fantôme : va de case en case vers la case choisie par l'IA."""
-    MOVE_DELAY = 14
+    """Fantôme : va de case en case vers la case choisie par l'IA.
 
-    def __init__(self, pos: tuple[int, int], image: Image, pacman: PacMan) -> None:
+    Classe abstraite : chaque sous-classe définit seulement sa cible
+    (choose_target). Le reste (correction de la cible, plus court
+    chemin, choix du pas) est commun à tous les fantômes.
+    """
+
+    MOVE_DELAY = 16
+    CLOSED_CELL = 15
+
+    def __init__(self, pos: tuple[int, int], image: Image,
+                 pacman: PacMan) -> None:
         """Place le fantôme immobile sur une case.
 
         Args:
@@ -197,18 +205,149 @@ class Ghost(Entity):
         super().__init__(pos, image)
         self.pacman: PacMan = pacman
 
+    @abstractmethod
+    def choose_target(self) -> tuple[int, int]:
+        """Renvoie la case visée par le fantôme, à redéfinir.
+
+        La case peut être hors de la grille ou fermée :
+        remind_target la corrige ensuite.
+
+        Returns:
+            Coordonnées (x, y) de la case visée.
+        """
+
+    def remind_target(self, target: tuple[int, int],
+                      grid: list[list[int]]) -> tuple[int, int]:
+        """Transforme une cible brute en case accessible du labyrinthe.
+
+        La cible est d'abord ramenée dans la grille. Si elle tombe sur
+        une case fermée (le motif « 42 »), on prend la case libre
+        la plus proche.
+
+        Args:
+            target: case (x, y) choisie par choose_target, peut-être invalide.
+            grid: grille du labyrinthe, un entier de murs par case.
+
+        Returns:
+            Une case (x, y) dans la grille et non fermée.
+        """
+        height = len(grid)
+        width = len(grid[0])
+        x, y = target
+        x = max(0, min(x, width - 1))
+        y = max(0, min(y, height - 1))
+        if grid[y][x] != self.CLOSED_CELL:
+            return (x, y)
+        for distance in range(1, max(width, height)):
+            for dy in range(-distance, distance + 1):
+                for dx in range(-distance, distance + 1):
+                    nx = x + dx
+                    ny = y + dy
+                    if (0 <= nx < width and 0 <= ny < height
+                            and grid[ny][nx] != self.CLOSED_CELL):
+                        return (nx, ny)
+        return (self.pacman.x, self.pacman.y)
+
+    @staticmethod
+    def is_valid_cell(x: int, y: int, width: int, height: int) -> bool:
+        """Indique si une case est dans la grille.
+
+        Args:
+            x: colonne de la case.
+            y: ligne de la case.
+            width: largeur de la grille (nombre de colonnes).
+            height: hauteur de la grille (nombre de lignes).
+
+        Returns:
+            True si la case existe dans la grille, False sinon.
+        """
+        return (0 <= x < width) and (0 <= y < height)
+
+    def is_open(self, x: int, y: int,
+                grid: list[list[int]]) -> list[tuple[int, int]]:
+        """Liste les cases voisines accessibles depuis une case.
+
+        Une voisine est accessible si elle est dans la grille et
+        qu'aucun mur ne sépare les deux cases.
+
+        Args:
+            x: colonne de la case de départ.
+            y: ligne de la case de départ.
+            grid: grille du labyrinthe.
+
+        Returns:
+            Les cases voisines (x, y) atteignables en un pas.
+        """
+        result: list[tuple[int, int]] = []
+        w = len(grid[0])
+        h = len(grid)
+        for k, v in self.WALLS.items():
+            dx, dy = k
+            if (self.is_valid_cell(x + dx, y + dy, w, h)
+                    and not grid[y][x] & v):
+                result.append((x + dx, y + dy))
+        return result
+
+    def path_target(self, grid: list[list[int]],
+                    target: tuple[int, int]) -> list[tuple[int, int]]:
+        """Cherche le plus court chemin du fantôme jusqu'à la cible (BFS).
+
+        Args:
+            grid: grille du labyrinthe.
+            target: case (x, y) à atteindre.
+
+        Returns:
+            Les cases du chemin, de la case du fantôme à la cible
+            incluses ; une liste vide si la cible est inaccessible.
+        """
+        start = (self.x, self.y)
+        queue: deque[tuple[int, int]] = deque([start])
+        previous: dict[tuple[int, int], tuple[int, int] | None] = {
+            start: None}
+        while queue:
+            current = queue.popleft()
+            if current == target:
+                break
+            x, y = current
+            for cell in self.is_open(x, y, grid):
+                if cell not in previous:
+                    previous[cell] = current
+                    queue.append(cell)
+        if target not in previous:
+            return []
+        res: list[tuple[int, int]] = []
+        end = target
+        parent = previous[end]
+        while parent is not None:
+            res.append(end)
+            end = parent
+            parent = previous[end]
+        res.append(end)
+        return res[::-1]
+
     def choose_step(self, grid: list[list[int]]) -> None:
         """Décide de la direction du prochain pas (self.moving).
 
-        TEMPORAIRE : choisit au hasard une direction sans mur,
-        en attendant l'IA des fantômes.
+        Le fantôme suit le premier pas du plus court chemin vers sa
+        cible. Sans chemin, il prend une direction libre au hasard ;
+        déjà sur sa cible, il reste immobile.
 
         Args:
             grid: grille du labyrinthe.
         """
-        free_directions = [direction for direction in self.WALLS
-                           if self.can_move(direction[0], direction[1], grid)]
-        if free_directions:
-            self.moving = random.choice(free_directions)
-        else:
+        target = self.choose_target()
+        target = self.remind_target(target, grid)
+        path = self.path_target(grid, target)
+
+        if not path:
+            free_directions = [direction for direction in self.WALLS
+                               if self.can_move(direction[0], direction[1],
+                                                grid)]
+            if free_directions:
+                self.moving = random.choice(free_directions)
+            else:
+                self.moving = (0, 0)
+        elif len(path) == 1:
             self.moving = (0, 0)
+        else:
+            self.moving = (path[1][0] - self.x, path[1][1] - self.y)

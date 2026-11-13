@@ -1,4 +1,6 @@
 .venv/
+src/__pycache__/
 __pycache__/
 .DS_Store
 pacman_subject.pdf
+.pytest_cache/

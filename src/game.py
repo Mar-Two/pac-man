@@ -5,9 +5,11 @@ from mazegenerator import MazeGenerator
 from .render import Screen, Image
 from .colors import DARK_BLUE
 from .state_machine import State, StateMachine
-from .entities import PacMan, Ghost
+from .entities import PacMan
 from .constants import (SCREEN_WIDTH, SCREEN_HEIGHT, SPRITE_CELL_RATIO, MIN_CELL_SIZE,
                         MAZE_AREA_WIDTH, MAZE_AREA_HEIGHT, GHOSTS_DIR, PACMAN_DIR)
+
+from .ghosts import Chaser, Ambusher, Pincer
 
 
 class Game(State):
@@ -70,8 +72,9 @@ class Game(State):
                          for direction, name in self.PACMAN_SPRITES.items()}
         ghost_images = [Image(f"{GHOSTS_DIR}/{name}.png", sprite_size) for name in self.GHOST_SPRITES]
         self.pacman = PacMan(pacman_spawn, pacman_images)
-        self.ghosts: list[Ghost] = [Ghost(spawn_pos, image, self.pacman)
-                                    for spawn_pos, image in zip(ghosts_spawn, ghost_images)]
+        chaser = Chaser(ghosts_spawn[0], ghost_images[0], self.pacman)
+        ambusher = Ambusher(ghosts_spawn[1], ghost_images[1], self.pacman)
+        self.ghosts: list[Chaser] = [chaser, ambusher]
 
     def on_exit(self) -> None:
         """Annule le virage en attente quand on quitte la partie (pause, menu...)."""
