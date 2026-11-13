@@ -58,7 +58,7 @@ class App:
 
 
 if __name__ == "__main__":
-    maze = MazeGenerator(size=(28, 28), seed=42)
+    maze = MazeGenerator(size=(14, 10), seed=42)
     window = App(maze)
     window.run()
     # for line in maze.maze:
