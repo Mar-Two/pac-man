@@ -1,11 +1,16 @@
 import sys
-from parsing import ConfigParser
-from game import Game
+
+from src.app import App
+from src.parsing import ConfigParser
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Arguments allowed")
-    config_parser = ConfigParser(sys.argv[1])
-    game = Game(**config_parser.dico_game)
-    print(game.levels)
+    if len(sys.argv) < 2:
+        print("Config files missing.")
+        sys.exit(1)
+    elif len(sys.argv) > 2:
+        print("One config files is allowed.")
+        sys.exit(1)
+    config = ConfigParser(sys.argv[1])
+    window = App(config.dico_game)
+    window.run()

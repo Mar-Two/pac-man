@@ -4,7 +4,6 @@ import pygame
 
 from .render import Screen
 
-
 class State(ABC):
     """Écran du jeu (menu, partie...) géré par une StateMachine.
 

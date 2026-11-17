@@ -1,7 +1,7 @@
 """Point d'entrée du jeu : fenêtre, machine à états et boucle principale."""
 from mazegenerator import MazeGenerator
 import pygame
-
+import sys
 from .render import Screen
 from .colors import BLACK
 from .constants import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
@@ -13,13 +13,13 @@ from .game import Game
 class App:
     """Programme principal : crée la fenêtre, les états et fait tourner la boucle."""
 
-    def __init__(self, maze: MazeGenerator) -> None:
+    def __init__(self, config_value) -> None:
         """Prépare l'application, sans encore ouvrir la fenêtre.
 
         Args:
             maze: labyrinthe généré utilisé pour la partie.
         """
-        self.maze = maze
+        self.param_game = config_value
 
     def run(self) -> None:
         """Ouvre la fenêtre et fait tourner la boucle principale à FPS images par seconde.
@@ -33,8 +33,9 @@ class App:
         clock = pygame.time.Clock()
 
         machine = StateMachine()
-        machine.add("main_menu", MainMenu(machine))
-        machine.add("game", Game(machine, self.maze))
+        game = Game(machine, self.param_game)
+        machine.add("game", game)
+        machine.add("main_menu", MainMenu(machine, game))
         machine.add("pause_menu", PauseMenu(machine))
         machine.change("main_menu")
 
@@ -55,11 +56,3 @@ class App:
             clock.tick(FPS)
 
         pygame.quit()
-
-
-if __name__ == "__main__":
-    maze = MazeGenerator(size=(28, 28), seed=42)
-    window = App(maze)
-    window.run()
-    # for line in maze.maze:
-    #     print(line)

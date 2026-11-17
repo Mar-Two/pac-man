@@ -1,5 +1,10 @@
 """Constantes partagées par plusieurs modules du jeu."""
 import math
+import sys
+from pathlib import Path
+
+# dossier des fichiers du jeu : le dossier temporaire de PyInstaller
+# dans l'exécutable, la racine du projet sinon
 
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 768
@@ -17,7 +22,9 @@ MAZE_AREA_HEIGHT = SCREEN_HEIGHT - 2 * MAZE_MARGIN
 # plus petite case autorisée : en dessous, le sprite devrait être rétréci sous SPRITE_SIZE (pixels)
 MIN_CELL_SIZE = math.ceil(SPRITE_SIZE / SPRITE_CELL_RATIO)
 
-ASSETS_DIR = "assets"
+BASE_DIR = Path(getattr(sys, "_MEIPASS",
+                        Path(__file__).resolve().parent.parent))
+ASSETS_DIR = str(BASE_DIR / "assets")
 MENU_DIR = f"{ASSETS_DIR}/menu"
 GHOSTS_DIR = f"{ASSETS_DIR}/ghosts"
 PACMAN_DIR = f"{ASSETS_DIR}/pacman"   # dossiers pacman-right, pacman-left, pacman-up, pacman-down

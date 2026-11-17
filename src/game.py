@@ -1,163 +1,127 @@
-"""Partie en cours : labyrinthe, entités, contrôles et affichage."""
+"""Partie en cours : enchaînement des niveaux, vies et contrôles."""
+import sys
+from typing import Any
+
 import pygame
 from mazegenerator import MazeGenerator
 
-from .render import Screen, Image
-from .colors import DARK_BLUE
+from .level import Level
+from .render import Screen
 from .state_machine import State, StateMachine
-from .entities import PacMan
-from .constants import (SCREEN_WIDTH, SCREEN_HEIGHT, SPRITE_CELL_RATIO, MIN_CELL_SIZE,
-                        MAZE_AREA_WIDTH, MAZE_AREA_HEIGHT, GHOSTS_DIR, PACMAN_DIR)
-
-from .ghosts import Chaser, Ambusher, Pincer
 
 
 class Game(State):
-    """Partie en cours : le labyrinthe, Pac-Man et les fantômes."""
+    """Partie en cours : garde ce qui dure toute la partie.
 
-    CLOSED_CELL = 15
-    KEY_DIRECTIONS = {
-          pygame.K_UP: (0, -1),
-          pygame.K_w: (0, -1),
-          pygame.K_DOWN: (0, 1),
-          pygame.K_s: (0, 1),
-          pygame.K_LEFT: (-1, 0),
-          pygame.K_a: (-1, 0),
-          pygame.K_RIGHT: (1, 0),
-          pygame.K_d: (1, 0)}
-    GHOST_SPRITES = ["pinky", "inky", "blinky", "clyde"]   # un fantôme par coin
-    PACMAN_SPRITES = {(1, 0): "right",       # direction (dx, dy) -> suffixe du dossier
-                      (-1, 0): "left",
-                      (0, -1): "up",
-                      (0, 1): "down"}
+    Les vies et l'index du niveau restent ici d'un niveau à l'autre ;
+    le labyrinthe, Pac-Man et les fantômes appartiennent au niveau en
+    cours (self.level), recréé à chaque nouveau niveau.
+    """
 
-    def __init__(self, state_machine: StateMachine, maze: MazeGenerator) -> None:
-        """Prépare la partie et place les entités sur des cases libres.
+    def __init__(self, state_machine: StateMachine,
+                 param_game: dict[str, Any]) -> None:
+        """Prépare la partie à partir de la configuration validée.
 
-        Pac-Man part près du centre, chaque fantôme près d'un coin.
+        Aucun niveau n'est encore créé : new_game() s'en charge quand le
+        joueur lance une partie.
 
         Args:
             state_machine: machine à états qui possède cette partie.
-            maze: labyrinthe généré dans lequel se joue la partie.
+            param_game: configuration validée (dico_game du parsing).
         """
         super().__init__(state_machine)
-        self.maze = maze
-        self.maze_grid = maze.maze
-        self.maze_height = len(self.maze_grid)
-        self.maze_width = len(self.maze_grid[0])
+        self.param_game = param_game
+        self.index = 0
+        self.levels: list[tuple[int, int]] = []
+        self.level: Level | None = None
+        self.lives: int = self.param_game["lives"]
+        self.create_levels()
 
-        # case : la plus grande taille entière qui fait tenir le labyrinthe dans la zone.
-        # Le "- 1" réserve le pixel du dernier mur (sud / est), dessiné sur x_end / y_end.
-        cell_size = min((MAZE_AREA_WIDTH - 1) // self.maze_width,
-                        (MAZE_AREA_HEIGHT - 1) // self.maze_height)
-        if cell_size < MIN_CELL_SIZE:
-            raise ValueError(f"labyrinthe {self.maze_width}x{self.maze_height} trop grand pour l'écran")
-        self.cell_size: int = cell_size
-        # sprite : une part fixe de la case
-        self.sprite_size: int = int(cell_size * SPRITE_CELL_RATIO)
-        self.x_offset: int = (SCREEN_WIDTH - self.cell_size * self.maze_width) // 2
-        self.y_offset: int = (SCREEN_HEIGHT - self.cell_size * self.maze_height) // 2
+    def create_levels(self) -> None:
+        """Remplit self.levels avec la taille (largeur, hauteur) des niveaux.
 
-        ghosts_pos: list[tuple[int, int]] = [(0, 0),
-                                             (0, self.maze_height - 1),
-                                             (self.maze_width - 1, 0),
-                                             (self.maze_width - 1, self.maze_height - 1)]
-        pacman_spawn: tuple[int, int] = self.find_spawn((self.maze_width // 2, self.maze_height // 2))
-        ghosts_spawn: list[tuple[int, int]] = [self.find_spawn(pos) for pos in ghosts_pos]
-        # images chargées une seule fois, déjà à la taille des sprites de ce labyrinthe
-        sprite_size = (self.sprite_size, self.sprite_size)
-        # 3 images par direction : 1 = bouche ouverte, 2 = mi-ouverte, 3 = fermée
-        pacman_images = {direction: [Image(f"{PACMAN_DIR}-{name}/{frame}.png", sprite_size)
-                                     for frame in (1, 2, 3)]
-                         for direction, name in self.PACMAN_SPRITES.items()}
-        ghost_images = [Image(f"{GHOSTS_DIR}/{name}.png", sprite_size) for name in self.GHOST_SPRITES]
-        self.pacman = PacMan(pacman_spawn, pacman_images)
-        chaser = Chaser(ghosts_spawn[0], ghost_images[0], self.pacman)
-        ambusher = Ambusher(ghosts_spawn[1], ghost_images[1], self.pacman)
-        self.ghosts: list[Chaser] = [chaser, ambusher]
-
-    def on_exit(self) -> None:
-        """Annule le virage en attente quand on quitte la partie (pause, menu...)."""
-        self.pacman.next_direction = (0, 0)
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        """Gère la pause (Échap) et les virages de Pac-Man.
-
-        Un virage reste en attente tant que sa touche est enfoncée.
-
-        Args:
-            event: événement reçu par la boucle principale.
+        À n'appeler qu'une fois : chaque appel ajoute tous les niveaux.
         """
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                self.state_machine.change("pause_menu")
-            elif event.key in self.KEY_DIRECTIONS:
-                self.pacman.next_direction = self.KEY_DIRECTIONS[event.key]
-        elif event.type == pygame.KEYUP:
-            if event.key in self.KEY_DIRECTIONS:
-                if self.KEY_DIRECTIONS[event.key] == self.pacman.next_direction:
-                    self.pacman.next_direction = (0, 0)
+        for level in self.param_game['levels']:
+            self.levels.append((level['width'], level['height']))
 
-    def update(self) -> None:
-        """Fait avancer Pac-Man, une fois par image."""
-        self.pacman.update(self.maze_grid)
-        for ghost in self.ghosts:
-            ghost.update(self.maze_grid)
+    def load_level(self) -> bool:
+        """Génère le labyrinthe du niveau self.index et crée ce niveau.
 
-    def find_spawn(self, pos: tuple[int, int]) -> tuple[int, int]:
-        """Cherche la case libre la plus proche d'un point du labyrinthe.
+        Le premier niveau utilise la seed de la config, les suivants
+        un labyrinthe aléatoire (seed=0). Si la génération ou la
+        création du niveau échoue, un message est affiché et le jeu
+        revient au menu principal, sans traceback.
 
-        Les cases fermées (celles du « 42 ») sont ignorées.
-
-        Args:
-            pos: case (x, y) d'où part la recherche.
+        L'appelant doit vérifier avant que self.index désigne bien un
+        niveau existant (sinon, la partie est gagnée).
 
         Returns:
-            Coordonnées (x, y) de la case trouvée, dans la grille.
-
-        Raises:
-            ValueError: si aucune case du labyrinthe n'est libre.
+            True si le niveau est prêt, False s'il n'a pas pu être créé.
         """
-        for distance in range(max(self.maze_width, self.maze_height)):
-            for dy in range(-distance, distance + 1):
-                for dx in range(-distance, distance + 1):
-                    x = pos[0] + dx
-                    y = pos[1] + dy
-                    if x < 0 or x >= self.maze_width or y < 0 or y >= self.maze_height:
-                        continue
-                    if self.maze_grid[y][x] != self.CLOSED_CELL:
-                        return (x, y)
-        raise ValueError("aucune case libre pour faire spawn une entité")
+        seed = self.param_game["seed"] if self.index == 0 else 0
+        try:
+            maze = MazeGenerator(self.levels[self.index], seed=seed)
+            self.level = Level(self.state_machine,
+                               self.param_game["pacgum"],
+                               self.param_game["points_per_pacgum"],
+                               self.param_game["points_per_super_pacgum"],
+                               self.param_game["points_per_ghost"],
+                               self.param_game["level_max_time"],
+                               self.lives,
+                               maze)
+        except Exception as e:
+            print(f"Error: level {self.index + 1} could not be generated "
+                  f"({type(e).__name__}: {e}), back to main menu",
+                  file=sys.stderr)
+            self.state_machine.change("main_menu")
+            return False
+        return True
+
+    def new_game(self) -> bool:
+        """Remet la partie à zéro et charge le premier niveau.
+
+        Returns:
+            True si le premier niveau est prêt, False sinon : la partie
+            ne doit alors pas démarrer.
+        """
+        self.index = 0
+        self.lives = self.param_game["lives"]
+        return self.load_level()
+
+    def on_exit(self) -> None:
+        """Transmet la sortie de l'état au niveau en cours (pause, menu)."""
+        assert self.level is not None
+        self.level.on_exit()
+
+    def update(self) -> None:
+        """Fait avancer le niveau en cours et gère la fin de partie.
+
+        Les vies sont recopiées depuis le niveau ; à 0, la partie est
+        perdue et le jeu revient au menu principal.
+        """
+        assert self.level is not None
+        self.level.update()
+        self.lives = self.level.lives
+        if self.lives <= 0:
+            print("Game over", file=sys.stderr)
+            self.state_machine.change("main_menu")
+            return
 
     def draw(self, screen: Screen) -> None:
-        """Dessine les murs du labyrinthe, centré dans l'écran, puis les fantômes et Pac-Man.
+        """Dessine le niveau en cours.
 
         Args:
             screen: écran (tableau de pixels) sur lequel dessiner.
         """
-        cell_size = self.cell_size
-        x_offset = self.x_offset
-        y_offset = self.y_offset
+        assert self.level is not None
+        self.level.draw(screen)
 
-        for y in range(self.maze_height):
-            for x in range(self.maze_width):
-                x_start = (x * cell_size) + x_offset
-                x_end = x_start + cell_size
-                y_start = (y * cell_size) + y_offset
-                y_end = y_start + cell_size
-                grid_value = self.maze_grid[y][x]
-                if (grid_value & 1):
-                    # NORD
-                    screen.draw_line((x_start, y_start), (x_end, y_start), DARK_BLUE)
-                if (grid_value & 4):
-                    # SUD
-                    screen.draw_line((x_start, y_end), (x_end, y_end), DARK_BLUE)
-                if (grid_value & 2):
-                    # EST
-                    screen.draw_line((x_end, y_start), (x_end, y_end), DARK_BLUE)
-                if (grid_value & 8):
-                    # OUEST
-                    screen.draw_line((x_start, y_start), (x_start, y_end), DARK_BLUE)
-        for ghost in self.ghosts:
-            ghost.draw(screen, cell_size, x_offset, y_offset)
-        self.pacman.draw(screen, cell_size, x_offset, y_offset)
+    def handle_event(self, event: pygame.event.Event) -> None:
+        """Transmet un événement clavier au niveau en cours.
+
+        Args:
+            event: événement reçu par la boucle principale.
+        """
+        assert self.level is not None
+        self.level.handle_event(event)

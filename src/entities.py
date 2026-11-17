@@ -11,7 +11,7 @@ class Entity(ABC):
     Sa position logique (x, y) est toujours une case entière de la grille ;
     seul l'affichage la place entre deux cases pendant un pas.
     """
-
+    TOUCH_DISTANCE = 0.5
     MOVE_DELAY = 12
     WALLS = {(0, -1): 1,    # nord
              (1, 0): 2,     # est
@@ -85,6 +85,36 @@ class Entity(ABC):
             self.x += self.moving[0]
             self.y += self.moving[1]
             self.choose_step(grid)
+
+    def screen_pos(self) -> tuple[float, float]:
+        """Renvoie la position réelle de l'entité, entre deux cases si besoin.
+
+        C'est la position dessinée à l'écran : la case logique, décalée
+        dans la direction du pas selon son avancement (move_timer).
+
+        Returns:
+            Coordonnées (x, y) en cases, pouvant être non entières.
+        """
+        progress = self.move_timer / self.MOVE_DELAY
+        return (self.x + self.moving[0] * progress,
+                self.y + self.moving[1] * progress)
+
+    def touches(self, other: "Entity") -> bool:
+        """Indique si cette entité touche une autre entité à l'écran.
+
+        Compare les positions réelles (pas les cases logiques) : deux
+        entités qui se croisent ou se suivent se touchent dès que
+        l'écart entre elles passe sous TOUCH_DISTANCE.
+
+        Args:
+            other: l'autre entité (par exemple un fantôme).
+
+        Returns:
+            True si les deux entités se touchent, False sinon.
+        """
+        x1, y1 = self.screen_pos()
+        x2, y2 = other.screen_pos()
+        return abs(x1 - x2) + abs(y1 - y2) < self.TOUCH_DISTANCE
 
     def current_image(self) -> Image:
         """Renvoie l'image à dessiner maintenant, à redéfinir si elle change.
@@ -190,7 +220,7 @@ class Ghost(Entity):
     chemin, choix du pas) est commun à tous les fantômes.
     """
 
-    MOVE_DELAY = 16
+    MOVE_DELAY = 18
     CLOSED_CELL = 15
 
     def __init__(self, pos: tuple[int, int], image: Image,

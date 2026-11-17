@@ -5,6 +5,7 @@ from .colors import RED
 from .state_machine import State, StateMachine
 from .render import Screen, Image
 from .constants import MENU_DIR
+from .game import Game
 
 # tailles fixes en pixels (les largeurs viennent des images elles-mêmes)
 HEADER_HEIGHT = 120
@@ -94,6 +95,10 @@ class MainMenu(Menu):
     OPTIONS = ("play", "scores", "instructions", "quit")
     HEADER_FILE = "header_main.png"
 
+    def __init__(self, state_machine, game: Game):
+        super().__init__(state_machine)
+        self.game = game
+
     def on_select(self, option: str) -> None:
         """Lance la partie, affiche les scores ou les instructions, ou quitte le programme.
 
@@ -101,7 +106,8 @@ class MainMenu(Menu):
             option: nom du bouton validé.
         """
         if option == "play":
-            self.state_machine.change("game")
+            if self.game.new_game():
+                self.state_machine.change("game")
         elif option == "scores":
             print("'Scores' from MainMenu")
         elif option == "instructions":

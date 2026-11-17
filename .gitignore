@@ -4,3 +4,5 @@ __pycache__/
 .DS_Store
 pacman_subject.pdf
 .pytest_cache/
+build/
+dist/
